@@ -1,0 +1,268 @@
+# 打 tag 时：测试、多架构编译、打包（deb/rpm/apk/pacman/openwrt）、Docker 多架构、发布 Release
+# 复杂逻辑在 Makefile 中实现（build-arch-ci, pack-*-only, pack-apk-alpine, pack-pacman-arch, docker-release）
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  BINARY: coredns
+  COREDNS_VER: v1.14.1
+  PLUGIN_REPO: github.com/hr3lxphr6j/coredns-ruledforward
+  VERSION: ${{ github.ref_name }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache-dependency-path: go.sum
+      - run: make test
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            goarm:
+          - goos: linux
+            goarch: arm64
+            goarm:
+          - goos: linux
+            goarch: arm
+            goarm: '6'
+          - goos: linux
+            goarch: arm
+            goarm: '7'
+          - goos: linux
+            goarch: 386
+            goarm:
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+      - run: make build-arch-ci GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} GOARM=${{ matrix.goarm }} VERSION=${{ env.VERSION }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bin-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goarm || '' }}
+          path: dist/bin/
+
+  packages:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download all binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: bin-*
+          path: dist/bin
+          merge-multiple: true
+      - name: Ensure dist/bin and list
+        run: |
+          mkdir -p dist/bin
+          # 合并多 artifact 时可能产生 dist/bin/bin-<arch>/ 子目录，扁平化到 dist/bin/
+          for d in dist/bin/bin-*/; do [ -d "$d" ] && mv "$d"* dist/bin/ 2>/dev/null; rmdir "$d" 2>/dev/null; done || true
+          ls -la dist/bin/
+          test -n "$(ls dist/bin/coredns-* 2>/dev/null)" || { echo "::error::No binaries from build job (dist/bin empty or wrong layout)"; exit 1; }
+      - run: |
+          sudo apt-get update && sudo apt-get install -y dpkg rpm
+      - run: make pack-deb-only VERSION=${{ env.VERSION }} PACK_DIR=.build/pack DIST_DIR=dist
+      - run: make pack-rpm-only VERSION=${{ env.VERSION }} PACK_DIR=.build/pack DIST_DIR=dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages-deb-rpm
+          path: |
+            dist/*.deb
+            dist/*.rpm
+
+  packages-apk:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            bin_suffix: linux-amd64
+          - arch: aarch64
+            bin_suffix: linux-arm64
+          - arch: armv7
+            bin_suffix: linux-arm7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: bin-*
+          path: dist/bin
+          merge-multiple: true
+      - name: Ensure dist/bin
+        run: |
+          mkdir -p dist/bin
+          for d in dist/bin/bin-*/; do [ -d "$d" ] && mv "$d"* dist/bin/ 2>/dev/null; rmdir "$d" 2>/dev/null; done || true
+          test -n "$(ls dist/bin/coredns-* 2>/dev/null)" || { echo "::error::No binaries from build job"; exit 1; }
+      - run: make pack-apk-only VERSION=${{ env.VERSION }} PACK_DIR=.build/pack DIST_DIR=dist
+      - run: make pack-apk-alpine STAGING=.build/pack/apk-${{ matrix.bin_suffix }} VERSION=${{ env.VERSION }} ARCH=${{ matrix.arch }} DIST_DIR=dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages-apk-${{ matrix.arch }}
+          path: |
+            dist/*.apk
+            dist/*-apk-staging.tar.gz
+          if-no-files-found: warn
+
+  packages-pacman:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            bin_suffix: linux-amd64
+          - arch: aarch64
+            bin_suffix: linux-arm64
+          - arch: armv7h
+            bin_suffix: linux-arm7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: bin-*
+          path: dist/bin
+          merge-multiple: true
+      - name: Ensure dist/bin
+        run: |
+          mkdir -p dist/bin
+          for d in dist/bin/bin-*/; do [ -d "$d" ] && mv "$d"* dist/bin/ 2>/dev/null; rmdir "$d" 2>/dev/null; done || true
+          test -n "$(ls dist/bin/coredns-* 2>/dev/null)" || { echo "::error::No binaries from build job"; exit 1; }
+      - run: make pack-pacman-only VERSION=${{ env.VERSION }} PACK_DIR=.build/pack DIST_DIR=dist
+      - run: make pack-pacman-arch STAGING=.build/pack/pacman-${{ matrix.bin_suffix }} VERSION=${{ env.VERSION }} ARCH=${{ matrix.arch }} DIST_DIR=dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages-pacman-${{ matrix.arch }}
+          path: |
+            dist/*.pkg.tar.zst
+            dist/*-pacman-staging.tar.gz
+          if-no-files-found: warn
+
+  packages-openwrt:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: bin-*
+          path: dist/bin
+          merge-multiple: true
+      - name: Ensure dist/bin
+        run: |
+          mkdir -p dist/bin
+          for d in dist/bin/bin-*/; do [ -d "$d" ] && mv "$d"* dist/bin/ 2>/dev/null; rmdir "$d" 2>/dev/null; done || true
+          test -n "$(ls dist/bin/coredns-* 2>/dev/null)" || { echo "::error::No binaries from build job"; exit 1; }
+      - run: make pack-openwrt-staging VERSION=${{ env.VERSION }} PACK_DIR=.build/pack DIST_DIR=dist
+      - run: make pack-openwrt-only VERSION=${{ env.VERSION }} PACK_DIR=.build/pack DIST_DIR=dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages-openwrt
+          path: dist/*.ipk
+          if-no-files-found: warn
+
+  docker:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: bin-*
+          path: dist/bin
+          merge-multiple: true
+      - name: Ensure dist/bin
+        run: |
+          mkdir -p dist/bin
+          for d in dist/bin/bin-*/; do [ -d "$d" ] && mv "$d"* dist/bin/ 2>/dev/null; rmdir "$d" 2>/dev/null; done || true
+          test -n "$(ls dist/bin/coredns-* 2>/dev/null)" || { echo "::error::No binaries from build job"; exit 1; }
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - run: make docker-release DOCKER_IMAGE=ghcr.io/${{ github.repository }} VERSION=${{ env.VERSION }} DOCKER_PUSH_FLAG=--push
+
+  release:
+    needs: [build, packages, packages-apk, packages-pacman, packages-openwrt]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: bin-*
+          path: dist/bin
+          merge-multiple: true
+      - name: Ensure dist/bin
+        run: |
+          mkdir -p dist/bin
+          for d in dist/bin/bin-*/; do [ -d "$d" ] && mv "$d"* dist/bin/ 2>/dev/null; rmdir "$d" 2>/dev/null; done || true
+          test -n "$(ls dist/bin/coredns-* 2>/dev/null)" || { echo "::error::No binaries from build job"; exit 1; }
+      - name: Download deb/rpm packages
+        uses: actions/download-artifact@v4
+        with:
+          name: packages-deb-rpm
+          path: dist/
+          merge-multiple: true
+      - name: Download apk packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: packages-apk-*
+          path: dist/
+          merge-multiple: true
+      - name: Download pacman packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: packages-pacman-*
+          path: dist/
+          merge-multiple: true
+      - name: Download openwrt packages
+        uses: actions/download-artifact@v4
+        with:
+          name: packages-openwrt
+          path: dist/
+          merge-multiple: true
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'rc') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'alpha') }}
+          generate_release_notes: true
+          files: |
+            dist/bin/*
+            dist/*.deb
+            dist/*.rpm
+            dist/*.apk
+            dist/*-apk-staging.tar.gz
+            dist/*.pkg.tar.zst
+            dist/*-pacman-staging.tar.gz
+            dist/*.ipk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,17 @@
+#!/bin/sh
+set -e
+# Create coredns user/group for systemd service (User=coredns, Group=coredns)
+if command -v systemd-sysusers >/dev/null 2>&1; then
+	systemd-sysusers /usr/lib/sysusers.d/coredns.conf
+else
+	getent group coredns >/dev/null 2>&1 || groupadd --system coredns
+	getent passwd coredns >/dev/null 2>&1 || useradd --system --gid coredns --home-dir /var/lib/coredns --shell /usr/sbin/nologin --comment "CoreDNS DNS server" coredns
+fi
+mkdir -p /var/lib/coredns /var/log /etc/coredns
+touch /var/log/coredns.log /var/log/coredns.err.log
+chown -R coredns:coredns /var/lib/coredns /etc/coredns /var/log/coredns.log /var/log/coredns.err.log
+# Reload systemd if present
+if command -v systemctl >/dev/null 2>&1; then
+	systemctl daemon-reload
+fi
+exit 0

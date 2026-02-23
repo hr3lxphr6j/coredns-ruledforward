@@ -1,0 +1,48 @@
+# Integration test: CoreDNS with ruledforward, stub DNS, client with dig.
+# Run from integration/: docker compose build && docker compose up -d && docker compose run --rm client /scripts/run_tests.sh
+services:
+  stub:
+    image: coredns/coredns:1.14.1
+    volumes:
+      - ./Corefile.stub:/etc/coredns/Corefile:ro
+      - ./fixtures/zone.google.com:/etc/coredns/zone.google.com:ro
+    command: ["-conf", "/etc/coredns/Corefile"]
+    networks:
+      intnet:
+        ipv4_address: 10.99.0.2
+  coredns:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    volumes:
+      - ./Corefile:/etc/coredns/Corefile:ro
+      - ./fixtures/dlc.dat:/etc/coredns/dlc.dat:ro
+      - ./fixtures/adguard.txt:/etc/coredns/adguard.txt:ro
+    command: ["-conf", "/etc/coredns/Corefile"]
+    # No host port publish: client reaches coredns:53 and coredns:9153 via Docker network
+    networks:
+      - intnet
+    depends_on:
+      - stub
+
+  client:
+    build:
+      context: ..
+      dockerfile: integration/Dockerfile.client
+    cap_add:
+      - NET_ADMIN
+    volumes:
+      - ./scripts:/scripts:ro
+    entrypoint: ["/bin/sh"]
+    command: ["/scripts/run_tests.sh"]
+    networks:
+      - intnet
+    depends_on:
+      - coredns
+
+networks:
+  intnet:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.99.0.0/24

@@ -1,0 +1,13 @@
+# 构建产物
+.build
+/dist/bin
+/coredns
+/coredns-*
+
+# Go
+*.exe
+*.test
+
+# project
+/Corefile
+dlc.dat

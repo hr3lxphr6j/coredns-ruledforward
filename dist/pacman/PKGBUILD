@@ -1,0 +1,30 @@
+# PKGBUILD for coredns (Arch Linux)
+# Staging is prepared by: make pack-pacman (creates .build/pack/pacman-*).
+# Copy contents of pacman-<arch> into this directory or point pkgdir to it, then run: makepkg.
+
+pkgname=coredns
+# CI replaces {{VERSION}} and {{ARCH}} via make pack-pacman-arch
+pkgver={{VERSION}}
+pkgrel=1
+pkgdesc="CoreDNS with ruledforward plugin"
+arch=('{{ARCH}}')
+url="https://github.com/hr3lxphr6j/coredns-ruledforward"
+license=('Apache')
+depends=()
+source=()
+sha256sums=()
+install=coredns.install
+
+build() {
+	# makepkg clears $srcdir before extract; copy pre-built tree from prebuilt/ into $srcdir for package()
+	cp -a "$srcdir/../prebuilt/"* "$srcdir/"
+}
+
+package() {
+	# Pre-built tree was copied into $srcdir in build()
+	install -Dm755 "$srcdir/usr/bin/coredns" -t "$pkgdir/usr/bin"
+	install -Dm644 "$srcdir/usr/lib/systemd/system/coredns.service" -t "$pkgdir/usr/lib/systemd/system"
+	install -Dm644 "$srcdir/usr/lib/sysusers.d/coredns.conf" -t "$pkgdir/usr/lib/sysusers.d"
+	install -Dm755 "$srcdir/etc/init.d/coredns" "$pkgdir/etc/init.d/coredns"
+	install -Dm644 "$srcdir/usr/share/man/man8/coredns.8" -t "$pkgdir/usr/share/man/man8"
+}

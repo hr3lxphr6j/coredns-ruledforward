@@ -1,0 +1,38 @@
+# Integration test Corefile: ruledforward with dlcfile, adguard_rules, multiple groups, prometheus.
+.:53 {
+  bind 0.0.0.0
+  prometheus 0.0.0.0:9153
+  cache 30
+  ruledforward . {
+    dlcfile /etc/coredns/dlc.dat
+    # Block AdGuard rule matches (return NODATA)
+    group block_ads {
+      action empty
+      adguard_rules /etc/coredns/adguard.txt
+    }
+    # DLC geosite "google" -> stub (www.google.com gets answer from stub; uses official dlc.dat)
+    group to_stub {
+      action forward
+      geosite google
+      to 10.99.0.2
+      policy sequential
+    }
+    group group_cn {
+      action forward
+      geosite cn
+      to 10.99.0.2
+      policy sequential
+    }
+    group group_google {
+      action forward
+      geosite google
+      to 10.99.0.2
+      policy sequential
+    }
+    group default {
+      action forward
+      to 10.99.0.2
+      policy sequential
+    }
+  }
+}

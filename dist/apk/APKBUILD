@@ -1,0 +1,23 @@
+# APKBUILD for coredns (Alpine). Placeholders: {{VERSION}}, {{ARCH}}
+# Staging is prepared by: make pack-apk-only. CI runs this inside Alpine via make pack-apk-alpine.
+# Pre-built binary package: no source fetch, no compile.
+pkgname="coredns"
+pkgver="{{VERSION}}"
+pkgrel=0
+pkgdesc="CoreDNS with ruledforward plugin"
+url="https://github.com/hr3lxphr6j/coredns-ruledforward"
+arch="{{ARCH}}"
+license="Apache"
+depends=""
+source=""
+sha256sums=""
+options="!check !strip"
+
+build() {
+	# Pre-built; nothing to compile
+	:
+}
+
+package() {
+	cp -a /tmp/apkbuild/pkg/* "$pkgdir/"
+}

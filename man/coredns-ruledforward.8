@@ -1,0 +1,32 @@
+.TH COREDNS 8 "2025-02-17" "coredns" "CoreDNS with ruledforward plugin"
+.SH NAME
+coredns \- CoreDNS DNS server with ruledforward plugin
+.SH SYNOPSIS
+.B coredns
+[\fI\-conf\fR \fIFILE\fR] [\fIoptions\fR]
+.SH DESCRIPTION
+\fBcoredns\fR is a single binary that runs CoreDNS with the
+\fBruledforward\fR plugin compiled in. It is the same as CoreDNS but includes
+rule-based forwarding: match query names against groups (geosite, AdGuard,
+inline rules) and either forward to upstreams or return empty (NODATA).
+.PP
+All standard CoreDNS command-line options apply. The main one is:
+.TP
+.BR \-conf " \fIFILE\fR"
+Path to the Corefile (default: \fICorefile\fR in current directory).
+.PP
+In the Corefile, use the \fBruledforward\fR plugin block. See the
+documentation and examples in the project repository.
+.SH FILES
+.TP
+.I /etc/coredns/Corefile
+Typical location for the Corefile when run as a system service.
+.TP
+.I /usr/bin/coredns
+Default binary location when installed from packages.
+.SH SEE ALSO
+Full documentation: https://github.com/hr3lxphr6j/coredns-ruledforward
+.PP
+CoreDNS manual: https://coredns.io/manual/
+.SH AUTHORS
+coredns project.

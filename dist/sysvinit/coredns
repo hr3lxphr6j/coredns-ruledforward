@@ -1,0 +1,59 @@
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          coredns
+# Required-Start:    $network
+# Required-Stop:     $network
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: CoreDNS with ruledforward plugin
+# Description:       CoreDNS DNS server with ruledforward plugin
+### END INIT INFO
+
+BINARY=/usr/bin/coredns
+CONF=/etc/coredns/Corefile
+PIDFILE=/var/run/coredns.pid
+
+case "$1" in
+	start)
+		if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+			echo "coredns already running"
+			exit 0
+		fi
+		echo "Starting coredns..."
+		start-stop-daemon -S -b -p "$PIDFILE" -x "$BINARY" -- -conf="$CONF"
+		if [ ! -s "$PIDFILE" ]; then
+			sleep 1
+			PID=$(pidof coredns 2>/dev/null); PID=${PID%% *}
+			[ -n "$PID" ] && echo "$PID" > "$PIDFILE"
+		fi
+		;;
+	stop)
+		echo "Stopping coredns..."
+		start-stop-daemon -K -p "$PIDFILE" 2>/dev/null || true
+		rm -f "$PIDFILE"
+		;;
+	restart|reload)
+		$0 stop
+		sleep 1
+		$0 start
+		;;
+	status)
+		if [ -f "$PIDFILE" ] && [ -n "$(cat "$PIDFILE" 2>/dev/null)" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
+			echo "coredns is running (PID $(cat "$PIDFILE"))"
+		else
+			PID=$(pidof coredns 2>/dev/null)
+			PID=${PID%% *}
+			if [ -n "$PID" ] && kill -0 "$PID" 2>/dev/null; then
+				echo "coredns is running (PID $PID)"
+			else
+				echo "coredns is not running"
+				exit 1
+			fi
+		fi
+		;;
+	*)
+		echo "Usage: $0 {start|stop|restart|reload|status}"
+		exit 1
+		;;
+esac
+exit 0

@@ -1,0 +1,35 @@
+// Minimal GeoSiteList/GeoSite/Domain proto for dlc.dat (v2fly domain-list-community).
+// Copied from v2fly/v2ray-core app/router/routercommon/common.proto;
+// no protoext import and no field 68000 to avoid extension 50000 conflict with grpc.
+syntax = "proto3";
+
+package ruledforward.dlc;
+option go_package = "github.com/hr3lxphr6j/coredns-ruledforward/internal/dlcpb";
+
+// Domain for routing/geosite decision.
+message Domain {
+  enum Type {
+    Plain = 0;
+    Regex = 1;
+    RootDomain = 2;
+    Full = 3;
+  }
+  Type type = 1;
+  string value = 2;
+
+  message Attribute {
+    string key = 1;
+  }
+  repeated Attribute attribute = 3;
+}
+
+message GeoSite {
+  string country_code = 1;
+  repeated Domain domain = 2;
+  bytes resource_hash = 3;
+  string code = 4;
+}
+
+message GeoSiteList {
+  repeated GeoSite entry = 1;
+}

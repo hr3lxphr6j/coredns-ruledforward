@@ -1,0 +1,39 @@
+# Arch Linux .install script for coredns package
+# See https://wiki.archlinux.org/title/PKGBUILD#install
+
+post_install() {
+	# Create coredns user/group for systemd service (User=coredns, Group=coredns)
+	if command -v systemd-sysusers >/dev/null 2>&1; then
+		systemd-sysusers /usr/lib/sysusers.d/coredns.conf
+	else
+		getent group coredns >/dev/null 2>&1 || groupadd --system coredns
+		getent passwd coredns >/dev/null 2>&1 || useradd --system --gid coredns --home-dir /var/lib/coredns --shell /usr/sbin/nologin --comment "CoreDNS DNS server" coredns
+	fi
+	# Create runtime dirs and apply ownership
+	mkdir -p /var/lib/coredns /etc/coredns
+	touch /var/log/coredns.log /var/log/coredns.err.log 2>/dev/null || true
+	chown -R coredns:coredns /var/lib/coredns /etc/coredns
+	test -f /var/log/coredns.log && chown coredns:coredns /var/log/coredns.log /var/log/coredns.err.log
+	# Reload systemd if present
+	if command -v systemctl >/dev/null 2>&1; then
+		systemctl daemon-reload
+	fi
+}
+
+post_upgrade() {
+	post_install
+}
+
+pre_remove() {
+	# Stop service before removal
+	if command -v systemctl >/dev/null 2>&1; then
+		systemctl stop coredns.service 2>/dev/null || true
+	fi
+}
+
+post_remove() {
+	# Reload systemd after removal
+	if command -v systemctl >/dev/null 2>&1; then
+		systemctl daemon-reload
+	fi
+}

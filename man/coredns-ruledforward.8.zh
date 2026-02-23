@@ -1,0 +1,30 @@
+.TH COREDNS 8 "2025-02-17" "coredns" "带 ruledforward 插件的 CoreDNS"
+.SH 名称
+coredns \- 带 ruledforward 插件的 CoreDNS DNS 服务
+.SH 概述
+.B coredns
+[\fI\-conf\fR \fI文件\fR] [\fI选项\fR]
+.SH 描述
+\fBcoredns\fR 是集成了 \fBruledforward\fR 插件的 CoreDNS 单二进制程序。
+在功能上与 CoreDNS 一致，并增加按规则转发：按分组（geosite、AdGuard、内联规则）
+匹配查询域名，然后转发到上游或返回空（NODATA）。
+.PP
+支持所有 CoreDNS 标准命令行选项，常用为：
+.TP
+.BR \-conf " \fI文件\fR"
+Corefile 路径（默认：当前目录下的 \fICorefile\fR）。
+.PP
+在 Corefile 中使用 \fBruledforward\fR 插件块，具体语法与示例见项目仓库文档。
+.SH 文件
+.TP
+.I /etc/coredns/Corefile
+以系统服务运行时常用的 Corefile 路径。
+.TP
+.I /usr/bin/coredns
+通过软件包安装时的默认二进制路径。
+.SH 参见
+完整文档：https://github.com/hr3lxphr6j/coredns-ruledforward
+.PP
+CoreDNS 手册：https://coredns.io/manual/
+.SH 作者
+coredns 项目。

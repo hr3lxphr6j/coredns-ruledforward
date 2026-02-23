@@ -1,0 +1,7 @@
+! AdGuard-style rules for integration tests
+||blocked.ads^
+||tracker.evil^
+/^ads\..*\.com$/
+allowed.example.com
+||allowed.ads^
+@@whitelist.example.com

@@ -1,0 +1,18 @@
+# CI: use pre-built binaries from build job (no source build).
+# Expects dist/bin/ with coredns-linux-{amd64,arm64,arm6,arm7,386} from artifact.
+FROM alpine:3.19
+RUN apk add --no-cache ca-certificates
+ARG TARGETOS=linux
+ARG TARGETARCH
+ARG TARGETVARIANT
+COPY dist/bin/ /binaries/
+RUN case "$TARGETARCH" in \
+    amd64) cp /binaries/coredns-linux-amd64 /usr/bin/coredns ;; \
+    arm64) cp /binaries/coredns-linux-arm64 /usr/bin/coredns ;; \
+    arm)  if [ "$TARGETVARIANT" = "v7" ]; then cp /binaries/coredns-linux-arm7 /usr/bin/coredns; else cp /binaries/coredns-linux-arm6 /usr/bin/coredns; fi ;; \
+    386)  cp /binaries/coredns-linux-386 /usr/bin/coredns ;; \
+    *)    echo "Unsupported TARGETARCH $TARGETARCH"; exit 1 ;; \
+    esac && chmod 755 /usr/bin/coredns && rm -rf /binaries
+EXPOSE 53 53/udp
+ENTRYPOINT ["/usr/bin/coredns"]
+CMD ["-conf", "/etc/coredns/Corefile"]

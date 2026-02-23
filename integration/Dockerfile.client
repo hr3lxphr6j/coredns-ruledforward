@@ -1,0 +1,3 @@
+FROM alpine:3.19
+RUN apk add --no-cache bind-tools curl
+# run_tests.sh is mounted at /scripts

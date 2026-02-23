@@ -1,0 +1,58 @@
+Name:           coredns
+Version:        {{VERSION}}
+Release:        {{RELEASE}}%{?dist}
+Summary:        CoreDNS with ruledforward plugin
+License:        Apache-2.0
+URL:            https://github.com/hr3lxphr6j/coredns-ruledforward
+BuildArch:      {{ARCH}}
+
+%description
+CoreDNS DNS server with the ruledforward plugin. Rule-based forwarding:
+match domains by geosite/AdGuard/inline rules, forward or return empty.
+
+%pre
+# Create coredns user/group for service (User= and Group= in systemd unit)
+getent group coredns >/dev/null 2>&1 || groupadd -r coredns
+getent passwd coredns >/dev/null 2>&1 || useradd -r -g coredns -d /var/lib/coredns -s /sbin/nologin -c "CoreDNS DNS server" coredns
+
+%post
+# Create runtime dirs and apply ownership; run systemd-sysusers if available
+mkdir -p /var/lib/coredns /etc/coredns
+touch /var/log/coredns.log /var/log/coredns.err.log 2>/dev/null || true
+chown -R coredns:coredns /var/lib/coredns /etc/coredns
+test -f /var/log/coredns.log && chown coredns:coredns /var/log/coredns.log /var/log/coredns.err.log
+if command -v systemd-sysusers >/dev/null 2>&1; then
+	systemd-sysusers /usr/lib/sysusers.d/coredns.conf
+fi
+if command -v systemctl >/dev/null 2>&1; then
+	systemctl daemon-reload
+fi
+
+%prep
+# No source tarball; Makefile copies staging tree into BUILD
+
+%build
+# No build step; binary is pre-built
+
+%install
+# Staging tree (usr/, etc/) was copied into BUILD by Makefile
+rm -rf %{buildroot}
+mkdir -p %{buildroot}
+cp -rp %{_builddir}/usr %{_builddir}/etc %{buildroot}/
+# Ensure man pages in buildroot (Makefile may put them only under BUILD)
+mkdir -p %{buildroot}/usr/share/man/man8 %{buildroot}/usr/share/man/zh_CN/man8
+test -f %{_builddir}/usr/share/man/man8/coredns.8 && cp -p %{_builddir}/usr/share/man/man8/coredns.8 %{buildroot}/usr/share/man/man8/
+test -f %{_builddir}/usr/share/man/zh_CN/man8/coredns.8 && cp -p %{_builddir}/usr/share/man/zh_CN/man8/coredns.8 %{buildroot}/usr/share/man/zh_CN/man8/
+
+%files
+/usr/bin/coredns
+/usr/lib/systemd/system/coredns.service
+/usr/lib/sysusers.d/coredns.conf
+/etc/init.d/coredns
+/usr/share/man/man8/coredns.8.gz
+/usr/share/man/zh_CN/man8/coredns.8.gz
+%doc
+
+%changelog
+* %(date "+%a %b %d %Y") - {{VERSION}}-{{RELEASE}}
+- CoreDNS with ruledforward plugin
