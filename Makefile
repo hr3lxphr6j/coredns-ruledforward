@@ -253,14 +253,15 @@ pack-apk-alpine:
 	@[ -n "$(STAGING)" ] && [ -n "$(VERSION)" ] && [ -n "$(ARCH)" ] || (echo "Need STAGING, VERSION, ARCH"; exit 1)
 	@[ -d "$(STAGING)" ] || (echo "Staging $(STAGING) not found"; exit 1)
 	@[ -f $(PWD)/dist/apk/APKBUILD ] || (echo "dist/apk/APKBUILD not found"; exit 1)
-	@docker run --rm -v "$(PWD)":/work -w /work -e STAGING="$(STAGING)" alpine:latest sh -c ' \
+	@docker run --rm -v "$(PWD)":/work -w /work -e STAGING="$(STAGING)" -e VERSION="$(VERSION)" -e ARCH="$(ARCH)" alpine:latest sh -c ' \
+		APK_VER=$$(echo "$$VERSION" | sed "s/^v//;s/-/_/g") && \
 		apk add --no-cache abuild alpine-sdk && \
 		adduser -D builder && \
 		printf "\n" | su builder -c "abuild-keygen -a" && \
 		cp /home/builder/.abuild/*.rsa.pub /etc/apk/keys/ && \
 		mkdir -p /tmp/apkbuild /tmp/apkbuild/pkg && \
 		cp -r /work/'"$(STAGING)"'/* /tmp/apkbuild/pkg/ && \
-		sed "s/{{VERSION}}/'"$(VERSION)"'/g; s/{{ARCH}}/'"$(ARCH)"'/g" /work/dist/apk/APKBUILD > /tmp/apkbuild/APKBUILD && \
+		sed "s/{{VERSION}}/$$APK_VER/g; s/{{ARCH}}/$$ARCH/g" /work/dist/apk/APKBUILD > /tmp/apkbuild/APKBUILD && \
 		chown -R builder:builder /tmp/apkbuild && \
 		cd /tmp/apkbuild && su builder -c "PACKAGER=coredns abuild -r -P /work/'"$(DIST_DIR)"'" 2>&1 || { \
 			echo "abuild failed, creating tar.gz fallback"; tar -czf /work/'"$(DIST_DIR)"'/$(BINARY)-'"$(VERSION)"'-'"$(ARCH)"'-apk-staging.tar.gz -C /work/'"$(STAGING)"' .; \
