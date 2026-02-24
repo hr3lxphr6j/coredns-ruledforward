@@ -256,7 +256,8 @@ pack-apk-alpine:
 	@docker run --rm -v "$(PWD)":/work -w /work -e STAGING="$(STAGING)" alpine:latest sh -c ' \
 		apk add --no-cache abuild alpine-sdk && \
 		adduser -D builder && \
-		printf "\n" | su builder -c "abuild-keygen -a -i" && \
+		printf "\n" | su builder -c "abuild-keygen -a" && \
+		cp /home/builder/.abuild/*.rsa.pub /etc/apk/keys/ && \
 		mkdir -p /tmp/apkbuild /tmp/apkbuild/pkg && \
 		cp -r /work/'"$(STAGING)"'/* /tmp/apkbuild/pkg/ && \
 		sed "s/{{VERSION}}/'"$(VERSION)"'/g; s/{{ARCH}}/'"$(ARCH)"'/g" /work/dist/apk/APKBUILD > /tmp/apkbuild/APKBUILD && \
