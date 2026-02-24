@@ -256,14 +256,16 @@ pack-apk-alpine:
 	@docker run --rm -v "$(PWD)":/work -w /work -e STAGING="$(STAGING)" -e VERSION="$(VERSION)" -e ARCH="$(ARCH)" alpine:latest sh -c ' \
 		APK_VER=$$(echo "$$VERSION" | sed "s/^v//;s/-/_/g") && \
 		apk add --no-cache abuild alpine-sdk && \
+		addgroup -S abuild && \
 		adduser -D builder && \
+		adduser builder abuild && \
 		printf "\n" | su builder -c "abuild-keygen -a" && \
 		cp /home/builder/.abuild/*.rsa.pub /etc/apk/keys/ && \
 		mkdir -p /tmp/apkbuild /tmp/apkbuild/pkg && \
 		cp -r /work/'"$(STAGING)"'/* /tmp/apkbuild/pkg/ && \
 		sed "s/{{VERSION}}/$$APK_VER/g; s/{{ARCH}}/$$ARCH/g" /work/dist/apk/APKBUILD > /tmp/apkbuild/APKBUILD && \
 		chown -R builder:builder /tmp/apkbuild && \
-		cd /tmp/apkbuild && su builder -c "PACKAGER=coredns abuild -r -P /work/'"$(DIST_DIR)"'" 2>&1 || { \
+		cd /tmp/apkbuild && su builder -c "PACKAGER=coredns abuild -P /work/'"$(DIST_DIR)"'" 2>&1 || { \
 			echo "abuild failed, creating tar.gz fallback"; tar -czf /work/'"$(DIST_DIR)"'/$(BINARY)-'"$(VERSION)"'-'"$(ARCH)"'-apk-staging.tar.gz -C /work/'"$(STAGING)"' .; \
 		}'
 	@echo "APK or fallback in $(DIST_DIR)/"
