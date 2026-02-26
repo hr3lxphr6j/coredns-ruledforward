@@ -47,14 +47,13 @@ type Group struct {
 	Opts     proxy.Options
 
 	// for refresh: static rules (inline + geosite) + URL list
-	GeositeNames   []string
-	InlineRules    []Rule
-	AdguardPaths   []string
-	AdguardURLs    []string
-	BootstrapDNS   string   // optional; used to resolve adguard_rules URL host to avoid DNS loop
-	StaticRules    []Rule
-	RefreshCron    string
-	StopRefresh    chan struct{}
+	GeositeNames []string
+	InlineRules  []Rule
+	AdguardPaths []string
+	AdguardURLs  []string
+	BootstrapDNS string // optional; used to resolve adguard_rules URL host to avoid DNS loop
+	RefreshCron  string
+	StopRefresh  chan struct{}
 }
 
 // Matcher returns the current matcher (atomic load). Returns nil if not yet set.
@@ -68,45 +67,62 @@ func (g *Group) Matcher() Matcher {
 
 // SetMatcher atomically stores the matcher. Used by Update (refresh) and tests.
 func (g *Group) SetMatcher(m Matcher) {
-	ptr := new(Matcher)
-	*ptr = m
-	g.matcher.Store(ptr)
+	g.matcher.Store(&m)
 }
 
-func (g *Group) updateMatcher(dlcMap map[string][]Rule) error {
+const (
+	UpdateMatcherGeosite byte = 1 << iota
+	UpdateMatcherInlinee
+	UpdateMatcherAdguardLocal
+	UpdateMatcherAdguardRemote
+
+	UpdateMatcherLocal = UpdateMatcherGeosite | UpdateMatcherInlinee | UpdateMatcherAdguardLocal
+	UpdateMatcherAll   = UpdateMatcherLocal | UpdateMatcherAdguardRemote
+)
+
+func (g *Group) updateMatcher(dlcMap map[string][]Rule, updateItems byte) error {
 	bm := NewBloomedMatcher(2<<13, bloomFP)
 
-	for _, listName := range g.GeositeNames {
-		if dlcMap != nil {
-			rules := dlcMap[strings.ToUpper(listName)]
-			for _, rule := range rules {
-				bm.AddRule(rule)
-				g.StaticRules = append(g.StaticRules, rule)
+	if updateItems&UpdateMatcherGeosite != 0 {
+		for _, listName := range g.GeositeNames {
+			if dlcMap != nil {
+				rules := dlcMap[strings.ToUpper(listName)]
+				for _, rule := range rules {
+					bm.AddRule(rule)
+				}
 			}
 		}
 	}
-	for _, rule := range g.InlineRules {
-		bm.AddRule(rule)
-		g.StaticRules = append(g.StaticRules, rule)
-	}
-	for _, path := range g.AdguardPaths {
-		log.Infof("Load Adguard Rule path: %s", path)
-		rules, err := LoadAdguardFromFile(path)
-		if err != nil {
-			return fmt.Errorf("group %s adguard_rules %s: %w", g.Name, path, err)
-		}
-		for _, rule := range rules {
+
+	if updateItems&UpdateMatcherInlinee != 0 {
+		for _, rule := range g.InlineRules {
 			bm.AddRule(rule)
 		}
 	}
-	for _, url := range g.AdguardURLs {
-		log.Infof("Load Adguard Rule URL: %s", url)
-		rules, err := LoadAdguardFromURL(url, adguardTimeout, g.BootstrapDNS)
-		if err != nil {
-			return fmt.Errorf("group %s adguard_rules %s: %w", g.Name, url, err)
+
+	if updateItems&UpdateMatcherAdguardLocal != 0 {
+		for _, path := range g.AdguardPaths {
+			log.Infof("Load Adguard Rule path: %s", path)
+			rules, err := LoadAdguardFromFile(path)
+			if err != nil {
+				return fmt.Errorf("group %s adguard_rules %s: %w", g.Name, path, err)
+			}
+			for _, rule := range rules {
+				bm.AddRule(rule)
+			}
 		}
-		for _, rule := range rules {
-			bm.AddRule(rule)
+	}
+
+	if updateItems&UpdateMatcherAdguardRemote != 0 {
+		for _, url := range g.AdguardURLs {
+			log.Infof("Load Adguard Rule URL: %s", url)
+			rules, err := LoadAdguardFromURL(url, adguardTimeout, g.BootstrapDNS)
+			if err != nil {
+				return fmt.Errorf("group %s adguard_rules %s: %w", g.Name, url, err)
+			}
+			for _, rule := range rules {
+				bm.AddRule(rule)
+			}
 		}
 	}
 
@@ -115,8 +131,8 @@ func (g *Group) updateMatcher(dlcMap map[string][]Rule) error {
 	return nil
 }
 
-func (g *Group) Update(dlcMap map[string][]Rule) error {
-	if err := g.updateMatcher(dlcMap); err != nil {
+func (g *Group) Update(dlcMap map[string][]Rule, updateItems byte) error {
+	if err := g.updateMatcher(dlcMap, updateItems); err != nil {
 		return err
 	}
 

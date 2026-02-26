@@ -123,9 +123,14 @@ func parseRuledforward(c *caddy.Controller) (*Ruledforward, error) {
 	}
 
 	for _, g := range r.groups {
-		if err := g.Update(dlcMap); err != nil {
+		if err := g.Update(dlcMap, UpdateMatcherLocal); err != nil {
 			return r, fmt.Errorf("updating group %s: %w", g.Name, err)
 		}
+		time.AfterFunc(time.Minute, func() {
+			if err := g.Update(dlcMap, UpdateMatcherAll); err != nil {
+				log.Errorf("updating group %s: %v", g.Name, err)
+			}
+		})
 	}
 
 	// Validate that there is at most one default group and cache reference
@@ -145,22 +150,22 @@ func parseRuledforward(c *caddy.Controller) (*Ruledforward, error) {
 
 // groupBuild holds raw config for a group until we build it.
 type groupBuild struct {
-	Name           string
-	Action         string
-	geositeNames   []string
-	inlineRules    []Rule
-	adguardRules   []Rule
-	adguardPaths   []string
-	adguardURLs    []string
-	bootstrapDNS   string
-	refreshCron    string
-	toHosts        []string
-	policy         string
-	maxfails       uint32
-	expire         time.Duration
-	tlsConfig      *tls.Config
-	tlsServerName  string
-	opts           proxy.Options
+	Name          string
+	Action        string
+	geositeNames  []string
+	inlineRules   []Rule
+	adguardRules  []Rule
+	adguardPaths  []string
+	adguardURLs   []string
+	bootstrapDNS  string
+	refreshCron   string
+	toHosts       []string
+	policy        string
+	maxfails      uint32
+	expire        time.Duration
+	tlsConfig     *tls.Config
+	tlsServerName string
+	opts          proxy.Options
 }
 
 func parseGroupDirective(c *caddy.Controller, gb *groupBuild) error {
@@ -429,7 +434,7 @@ func (r *Ruledforward) runRefresh(g *Group) {
 			timer.Stop()
 			return
 		case <-timer.C:
-			if err := g.Update(dlcMap); err != nil {
+			if err := g.Update(dlcMap, UpdateMatcherAll); err != nil {
 				log.Errorf("refresh failed for group '%s': %v", g.Name, err)
 			}
 		}

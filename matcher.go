@@ -48,11 +48,11 @@ type Matcher interface {
 // matcher has no internal lock; the holder (Group) uses atomic.Pointer + Store/Load for concurrent safety.
 // domainTrie is built in Build() from domain slice for O(qname labels) domain matching instead of O(rules).
 type matcher struct {
-	full       map[string]struct{}   // exact names
-	domain     []string             // suffix rules, kept for keysForBloom
-	domainTrie *domainTrieNode      // label trie for domain match (right-to-left)
-	keyword    []string             // substring
-	regex      []*regexp.Regexp     // compiled
+	full       map[string]struct{} // exact names
+	domain     []string            // suffix rules, kept for keysForBloom
+	domainTrie *domainTrieNode     // label trie for domain match (right-to-left)
+	keyword    []string            // substring
+	regex      []*regexp.Regexp    // compiled
 }
 
 // NewMatcher returns an empty matcher.
@@ -96,13 +96,8 @@ func domainLabels(fqdn string) []string {
 		return nil
 	}
 	parts := strings.Split(fqdn, ".")
-	out := make([]string, 0, len(parts))
-	for i := len(parts) - 1; i >= 0; i-- {
-		if parts[i] != "" {
-			out = append(out, parts[i])
-		}
-	}
-	return out
+	slices.Reverse(parts)
+	return parts
 }
 
 // insertDomainTrie inserts a single domain rule (FQDN) into the trie. Labels right-to-left.

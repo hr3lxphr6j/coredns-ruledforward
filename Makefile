@@ -60,6 +60,9 @@ get-coredns:
 		echo "Cloning CoreDNS $(COREDNS_VER)..."; \
 		git clone --depth 1 --branch $(COREDNS_VER) https://github.com/coredns/coredns.git $(BUILD_DIR)/coredns; \
 	fi
+	@if [ -f "$(REPO_PATH)/plugin.cfg" ]; then \
+  		cp "$(REPO_PATH)/plugin.cfg" "$(BUILD_DIR)/coredns/plugin.cfg"; \
+  	fi
 	@if [ ! -f "$(BUILD_DIR)/coredns/plugin.cfg" ]; then \
 		echo "Removing incomplete $(BUILD_DIR)/coredns and re-cloning..."; \
 		rm -rf "$(BUILD_DIR)/coredns" && \
@@ -147,7 +150,7 @@ integration:
 	@./integration/scripts/run.sh
 
 clean:
-	rm -rf $(BUILD_DIR) $(DIST_DIR) $(BINARY) $(BINARY)-*
+	rm -rf $(BUILD_DIR) $(DIST_DIR)/bin $(BINARY) $(BINARY)-*
 
 # ---------- 打包用：安装路径与通用文件 ----------
 PREFIX     ?= /usr
