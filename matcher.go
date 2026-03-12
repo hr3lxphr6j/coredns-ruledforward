@@ -31,6 +31,21 @@ const (
 	RuleRegex
 )
 
+func (r RuleType) String() string {
+	switch r {
+	case RuleDomain:
+		return "domain"
+	case RuleFull:
+		return "full"
+	case RuleKeyword:
+		return "keyword"
+	case RuleRegex:
+		return "regex"
+	default:
+		return "unknown"
+	}
+}
+
 // Rule is a single matching rule.
 type Rule struct {
 	Type  RuleType

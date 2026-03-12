@@ -81,6 +81,7 @@ const (
 )
 
 func (g *Group) updateMatcher(dlcMap map[string][]Rule, updateItems byte) error {
+	rulesTotal.Reset()
 	bm := NewBloomedMatcher(2<<13, bloomFP)
 
 	if updateItems&UpdateMatcherGeosite != 0 {
@@ -88,6 +89,7 @@ func (g *Group) updateMatcher(dlcMap map[string][]Rule, updateItems byte) error 
 			if dlcMap != nil {
 				rules := dlcMap[strings.ToUpper(listName)]
 				for _, rule := range rules {
+					rulesTotal.WithLabelValues(g.Name, rule.Type.String()).Inc()
 					bm.AddRule(rule)
 				}
 			}
@@ -96,6 +98,7 @@ func (g *Group) updateMatcher(dlcMap map[string][]Rule, updateItems byte) error 
 
 	if updateItems&UpdateMatcherInlinee != 0 {
 		for _, rule := range g.InlineRules {
+			rulesTotal.WithLabelValues(g.Name, rule.Type.String()).Inc()
 			bm.AddRule(rule)
 		}
 	}
@@ -108,6 +111,7 @@ func (g *Group) updateMatcher(dlcMap map[string][]Rule, updateItems byte) error 
 				return fmt.Errorf("group %s adguard_rules %s: %w", g.Name, path, err)
 			}
 			for _, rule := range rules {
+				rulesTotal.WithLabelValues(g.Name, rule.Type.String()).Inc()
 				bm.AddRule(rule)
 			}
 		}
@@ -121,6 +125,7 @@ func (g *Group) updateMatcher(dlcMap map[string][]Rule, updateItems byte) error 
 				return fmt.Errorf("group %s adguard_rules %s: %w", g.Name, url, err)
 			}
 			for _, rule := range rules {
+				rulesTotal.WithLabelValues(g.Name, rule.Type.String()).Inc()
 				bm.AddRule(rule)
 			}
 		}

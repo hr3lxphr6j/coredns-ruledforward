@@ -28,4 +28,11 @@ var (
 		Name:      "forward_upstream_fail_total",
 		Help:      "Counter of forward groups where all upstreams failed for a request.",
 	}, []string{"group"})
+
+	rulesTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: plugin.Namespace,
+		Subsystem: "ruledforward",
+		Name:      "rules_total",
+		Help:      "Total number of rules loaded per group and rule type.",
+	}, []string{"group", "rule"})
 )
