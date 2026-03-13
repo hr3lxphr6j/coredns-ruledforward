@@ -3,7 +3,7 @@ package ruledforward
 import (
 	"context"
 	"errors"
-	"fmt"
+	"iter"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -80,60 +80,86 @@ const (
 	UpdateMatcherAll   = UpdateMatcherLocal | UpdateMatcherAdguardRemote
 )
 
-func (g *Group) updateMatcher(dlcMap map[string][]Rule, updateItems byte) error {
-	rulesTotal.Delete(map[string]string{
-		"group": g.Name,
-	})
-	bm := NewBloomedMatcher(2<<13, bloomFP)
+func (g *Group) rules(dlcMap map[string][]Rule, updateItems byte) iter.Seq[Rule] {
+	return func(yield func(Rule) bool) {
+		if updateItems&UpdateMatcherGeosite != 0 {
+			for _, listName := range g.GeositeNames {
+				if dlcMap != nil {
+					for _, rule := range dlcMap[strings.ToUpper(listName)] {
+						if !yield(rule) {
+							return
+						}
+					}
+				}
+			}
+		}
 
-	if updateItems&UpdateMatcherGeosite != 0 {
-		for _, listName := range g.GeositeNames {
-			if dlcMap != nil {
-				rules := dlcMap[strings.ToUpper(listName)]
+		if updateItems&UpdateMatcherInlinee != 0 {
+			for _, rule := range g.InlineRules {
+				if !yield(rule) {
+					return
+				}
+			}
+		}
+
+		if updateItems&UpdateMatcherAdguardLocal != 0 {
+			for _, path := range g.AdguardPaths {
+				log.Infof("Load Adguard Rule path: %s", path)
+				rules, err := LoadAdguardFromFile(path)
+				if err != nil {
+					log.Errorf("Load Adguard Rule path %s failed: %v", path, err)
+					continue
+				}
 				for _, rule := range rules {
-					rulesTotal.WithLabelValues(g.Name, rule.Type.String()).Inc()
-					bm.AddRule(rule)
+					if !yield(rule) {
+						return
+					}
+				}
+			}
+		}
+
+		if updateItems&UpdateMatcherAdguardRemote != 0 {
+			for _, url := range g.AdguardURLs {
+				log.Infof("Load Adguard Rule URL: %s", url)
+				rules, err := LoadAdguardFromURL(url, adguardTimeout, g.BootstrapDNS)
+				if err != nil {
+					log.Errorf("Load Adguard Rule URL %s failed: %v", url, err)
+				}
+				for _, rule := range rules {
+					if !yield(rule) {
+						return
+					}
 				}
 			}
 		}
 	}
+}
 
-	if updateItems&UpdateMatcherInlinee != 0 {
-		for _, rule := range g.InlineRules {
-			rulesTotal.WithLabelValues(g.Name, rule.Type.String()).Inc()
-			bm.AddRule(rule)
-		}
+func (g *Group) updateMatcher(dlcMap map[string][]Rule, updateItems byte) error {
+	counts := map[RuleType]float64{
+		RuleDomain:  0,
+		RuleFull:    0,
+		RuleKeyword: 0,
+		RuleRegex:   0,
+	}
+	rules := make([]Rule, 0, 2<<10)
+	for rule := range g.rules(dlcMap, updateItems) {
+		rules = append(rules, rule)
+		counts[rule.Type]++
 	}
 
-	if updateItems&UpdateMatcherAdguardLocal != 0 {
-		for _, path := range g.AdguardPaths {
-			log.Infof("Load Adguard Rule path: %s", path)
-			rules, err := LoadAdguardFromFile(path)
-			if err != nil {
-				return fmt.Errorf("group %s adguard_rules %s: %w", g.Name, path, err)
-			}
-			for _, rule := range rules {
-				rulesTotal.WithLabelValues(g.Name, rule.Type.String()).Inc()
-				bm.AddRule(rule)
-			}
-		}
+	bm := NewBloomedMatcher(uint(counts[RuleFull]+counts[RuleDomain]), bloomFP)
+	for _, rule := range rules {
+		bm.AddRule(rule)
 	}
-
-	if updateItems&UpdateMatcherAdguardRemote != 0 {
-		for _, url := range g.AdguardURLs {
-			log.Infof("Load Adguard Rule URL: %s", url)
-			rules, err := LoadAdguardFromURL(url, adguardTimeout, g.BootstrapDNS)
-			if err != nil {
-				return fmt.Errorf("group %s adguard_rules %s: %w", g.Name, url, err)
-			}
-			for _, rule := range rules {
-				rulesTotal.WithLabelValues(g.Name, rule.Type.String()).Inc()
-				bm.AddRule(rule)
-			}
-		}
-	}
-
 	g.SetMatcher(bm)
+
+	rulesTotal.Delete(map[string]string{
+		"group": g.Name,
+	})
+	for typ, cnt := range counts {
+		rulesTotal.WithLabelValues(g.Name, typ.String()).Add(cnt)
+	}
 	return nil
 }
 

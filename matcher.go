@@ -5,18 +5,21 @@ import (
 	"iter"
 	"regexp"
 	"strings"
+	"sync"
+	"sync/atomic"
 
+	"github.com/cloudflare/ahocorasick"
 	"github.com/miekg/dns"
 )
 
-// domainTrieNode is a label-based trie for domain suffix matching (reference: v2fly/v2ray-core common/strmatcher DomainMatcherGroup).
+// domainTrieNode is a label-based trie for domain suffix matching.
 // Labels are traversed right-to-left (TLD to subdomain). match is true when this node is the end of a rule domain.
 type domainTrieNode struct {
 	children map[string]*domainTrieNode
 	match    bool
 }
 
-// RuleType is the type of domain rule.
+// RuleType is the type of domain rule supported by the matcher.
 type RuleType int
 
 const (
@@ -45,15 +48,16 @@ func (r RuleType) String() string {
 	}
 }
 
-// Rule is a single matching rule.
+// Rule is a single matching rule used by the matcher.
 type Rule struct {
 	Type  RuleType
 	Value string // normalized (lowercase, FQDN for domain/full)
 }
 
+// Matcher defines the minimal interface for a rule matcher used by ruledforward.
+// Implementations must be safe for concurrent Match calls after all rules are added.
 type Matcher interface {
 	AddRule(r Rule)
-
 	Match(fqdn string) bool
 }
 
@@ -63,8 +67,12 @@ type Matcher interface {
 type matcher struct {
 	full       map[string]struct{} // exact names
 	domainTrie *domainTrieNode     // label trie for domain match (right-to-left)
-	keyword    []string            // substring
-	regex      []*regexp.Regexp    // compiled
+
+	keyword        []string // substring
+	keywordMatcher atomic.Pointer[ahocorasick.Matcher]
+	keywordOnce    sync.Once
+
+	regex []*regexp.Regexp // compiled
 }
 
 // NewMatcher returns an empty matcher.
@@ -169,10 +177,13 @@ func (m *matcher) Match(fqdn string) bool {
 	if m.matchDomainTrie(fqdn) {
 		return true
 	}
-	for _, k := range m.keyword {
-		if strings.Contains(fqdn, k) {
-			return true
-		}
+	if m.keywordMatcher.Load() == nil {
+		m.keywordOnce.Do(func() {
+			m.keywordMatcher.Store(ahocorasick.NewStringMatcher(m.keyword))
+		})
+	}
+	if m.keywordMatcher.Load().Contains([]byte(fqdn)) {
+		return true
 	}
 	for _, re := range m.regex {
 		if re.MatchString(fqdn) {
@@ -182,18 +193,23 @@ func (m *matcher) Match(fqdn string) bool {
 	return false
 }
 
+// NewBloomedMatcher constructs a Matcher implementation that wraps a concrete matcher
+// with a Bloom filter to short-circuit obvious non-matches. The Bloom filter is sized
+// with an estimated number of entries n and target false-positive rate fp.
 func NewBloomedMatcher(n uint, fp float64) Matcher {
 	return &bloomedMatcher{
-		m:  matcher{full: make(map[string]struct{})},
+		m:  NewMatcher(),
 		bf: NewBloomFilter(n, fp),
 	}
 }
 
 type bloomedMatcher struct {
-	m  matcher
+	m  Matcher
 	bf *BloomFilter
 }
 
+// AddRule adds a rule to the underlying matcher and, for domain/full rules,
+// also inserts the rule value into the Bloom filter for fast negative checks.
 func (m *bloomedMatcher) AddRule(r Rule) {
 	m.m.AddRule(r)
 	switch r.Type {
@@ -204,6 +220,8 @@ func (m *bloomedMatcher) AddRule(r Rule) {
 	}
 }
 
+// Match first consults the Bloom filter to quickly rule out obvious non-matches,
+// then delegates to the underlying matcher for exact rule evaluation.
 func (m *bloomedMatcher) Match(fqdn string) bool {
 	return m.bf.MaybeMatch(fqdn) && m.m.Match(fqdn)
 }
