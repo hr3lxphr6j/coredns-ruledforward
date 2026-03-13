@@ -2,7 +2,6 @@
 package ruledforward
 
 import (
-	"maps"
 	"regexp"
 	"slices"
 	"strings"
@@ -54,7 +53,6 @@ type Rule struct {
 
 type Matcher interface {
 	AddRule(r Rule)
-	Build()
 
 	Match(qname string) bool
 }
@@ -64,7 +62,6 @@ type Matcher interface {
 // domainTrie is built in Build() from domain slice for O(qname labels) domain matching instead of O(rules).
 type matcher struct {
 	full       map[string]struct{} // exact names
-	domain     []string            // suffix rules, kept for keysForBloom
 	domainTrie *domainTrieNode     // label trie for domain match (right-to-left)
 	keyword    []string            // substring
 	regex      []*regexp.Regexp    // compiled
@@ -74,7 +71,6 @@ type matcher struct {
 func NewMatcher() Matcher {
 	return &matcher{
 		full:    make(map[string]struct{}),
-		domain:  nil,
 		keyword: nil,
 		regex:   nil,
 	}
@@ -83,19 +79,14 @@ func NewMatcher() Matcher {
 // AddRule adds one rule to the matcher (call before any concurrent use, or during build).
 func (m *matcher) AddRule(r Rule) {
 	val := strings.ToLower(dns.Fqdn(r.Value))
-	if r.Type == RuleFull {
+	switch r.Type {
+	case RuleFull:
 		m.full[val] = struct{}{}
-		return
-	}
-	if r.Type == RuleDomain {
-		m.domain = append(m.domain, val)
-		return
-	}
-	if r.Type == RuleKeyword {
+	case RuleDomain:
+		m.insertDomainTrie(val)
+	case RuleKeyword:
 		m.keyword = append(m.keyword, strings.ToLower(r.Value))
-		return
-	}
-	if r.Type == RuleRegex {
+	case RuleRegex:
 		re, err := regexp.Compile(r.Value)
 		if err != nil {
 			return
@@ -161,24 +152,6 @@ func (m *matcher) matchDomainTrie(qname string) bool {
 	return node != nil && node.match
 }
 
-// Build finalizes the matcher: builds domain trie from domain rules and sorts domain slice for keysForBloom.
-// Call after adding all rules.
-func (m *matcher) Build() {
-	// Build label trie for O(qname labels) domain matching (reference: v2ray DomainMatcherGroup)
-	seen := make(map[string]struct{})
-	for _, d := range m.domain {
-		if _, ok := seen[d]; ok {
-			continue
-		}
-		seen[d] = struct{}{}
-		m.insertDomainTrie(d)
-	}
-	// Keep domain slice sorted for keysForBloom (longest first)
-	slices.SortFunc(m.domain, func(a, b string) int {
-		return len(b) - len(a)
-	})
-}
-
 // Match returns true if qname matches any rule. Order: full -> domain (trie) -> keyword -> regex.
 func (m *matcher) Match(qname string) bool {
 	q := strings.ToLower(dns.Fqdn(qname))
@@ -202,12 +175,6 @@ func (m *matcher) Match(qname string) bool {
 	return false
 }
 
-// keysForBloom returns domain and full values that can be added to a bloom filter
-// (for domain and full rules only).
-func (m *matcher) keysForBloom() (full []string, domain []string) {
-	return slices.Collect(maps.Keys(m.full)), slices.Clone(m.domain)
-}
-
 func NewBloomedMatcher(n uint, fp float64) Matcher {
 	return &bloomedMatcher{
 		m:  matcher{full: make(map[string]struct{})},
@@ -228,10 +195,6 @@ func (m *bloomedMatcher) AddRule(r Rule) {
 	default:
 		// do nothing
 	}
-}
-
-func (m *bloomedMatcher) Build() {
-	m.m.Build()
 }
 
 func (m *bloomedMatcher) Match(qname string) bool {

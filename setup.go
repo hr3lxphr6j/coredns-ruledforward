@@ -79,7 +79,7 @@ func parseRuledforward(c *caddy.Controller) (*Ruledforward, error) {
 				return r, c.ArgErr()
 			}
 			dlcfile = c.Val()
-			if dlcfile != "" && filepath.IsAbs(dlcfile) == false && dnsserver.GetConfig(c).Root != "" {
+			if dlcfile != "" && !filepath.IsAbs(dlcfile) && dnsserver.GetConfig(c).Root != "" {
 				dlcfile = filepath.Join(dnsserver.GetConfig(c).Root, dlcfile)
 			}
 		case "group":

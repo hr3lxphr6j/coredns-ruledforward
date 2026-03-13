@@ -11,7 +11,6 @@ func BenchmarkMatcherMatch_DomainTrie_1e4_Hit(b *testing.B) {
 	for i := range 10_000 {
 		m.AddRule(Rule{Type: RuleDomain, Value: fmt.Sprintf("sub%d.example.com.", i)})
 	}
-	m.Build()
 	qname := "a.sub5000.example.com."
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -25,7 +24,6 @@ func BenchmarkMatcherMatch_DomainTrie_1e4_Miss(b *testing.B) {
 	for i := range 10_000 {
 		m.AddRule(Rule{Type: RuleDomain, Value: fmt.Sprintf("sub%d.example.com.", i)})
 	}
-	m.Build()
 	qname := "other.zone.org."
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -39,7 +37,6 @@ func BenchmarkMatcherMatch_DomainTrie_1e5_Hit(b *testing.B) {
 	for i := range 100_000 {
 		m.AddRule(Rule{Type: RuleDomain, Value: fmt.Sprintf("sub%d.example.com.", i)})
 	}
-	m.Build()
 	qname := "a.sub50000.example.com."
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -53,7 +50,6 @@ func BenchmarkMatcherMatch_Full(b *testing.B) {
 	for i := range 1000 {
 		m.AddRule(Rule{Type: RuleFull, Value: fmt.Sprintf("exact%d.example.com.", i)})
 	}
-	m.Build()
 	qname := "exact500.example.com."
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

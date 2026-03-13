@@ -133,7 +133,6 @@ func (g *Group) updateMatcher(dlcMap map[string][]Rule, updateItems byte) error 
 		}
 	}
 
-	bm.Build()
 	g.SetMatcher(bm)
 	return nil
 }

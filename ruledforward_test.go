@@ -18,7 +18,6 @@ func TestRuledforwardServeDNS(t *testing.T) {
 	r := &Ruledforward{from: "."}
 	m := NewBloomedMatcher(1000, 0.01)
 	m.AddRule(Rule{Type: RuleDomain, Value: "blocked.example.com."})
-	m.Build()
 	g := &Group{Name: "block", Action: "empty"}
 	g.SetMatcher(m)
 	r.groups = []*Group{g}
@@ -113,11 +112,9 @@ func TestDefaultGroupMatchesAll(t *testing.T) {
 	// Create a blocking group that matches specific domain
 	m := NewBloomedMatcher(1000, 0.01)
 	m.AddRule(Rule{Type: RuleDomain, Value: "ads.example.com."})
-	m.Build()
 
 	// Create default group (empty matcher - matches nothing by itself, used as default)
 	defaultMatcher := NewMatcher()
-	defaultMatcher.Build()
 	defaultGroup := &Group{Name: "default", Action: "empty"}
 	defaultGroup.SetMatcher(defaultMatcher)
 
