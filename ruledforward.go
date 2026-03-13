@@ -162,7 +162,7 @@ func (r *Ruledforward) ServeDNS(ctx context.Context, w dns.ResponseWriter, req *
 		if g.Name == "default" {
 			continue
 		}
-		if m := g.Matcher(); m == nil || !m.Match(qname) {
+		if m := g.Matcher(); m == nil || !m.Match(strings.ToLower(dns.Fqdn(qname))) {
 			continue
 		}
 

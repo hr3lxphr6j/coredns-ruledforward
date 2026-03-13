@@ -2,8 +2,8 @@
 package ruledforward
 
 import (
+	"iter"
 	"regexp"
-	"slices"
 	"strings"
 
 	"github.com/miekg/dns"
@@ -54,7 +54,7 @@ type Rule struct {
 type Matcher interface {
 	AddRule(r Rule)
 
-	Match(qname string) bool
+	Match(fqdn string) bool
 }
 
 // matcher holds rules and provides Match(qname).
@@ -95,28 +95,40 @@ func (m *matcher) AddRule(r Rule) {
 	}
 }
 
-// domainLabels returns labels from right to left (TLD first). FQDN "a.b.example.com." -> ["com", "example", "b", "a"].
-func domainLabels(fqdn string) []string {
-	fqdn = strings.TrimSuffix(fqdn, ".")
-	if fqdn == "" {
-		return nil
+// domainLabels yields labels from right to left (TLD first) via iterator-style API.
+// Example: FQDN "a.b.example.com." -> yields "com", "example", "b", "a".
+func domainLabels(fqdn string) iter.Seq[string] {
+	return func(yield func(string) bool) {
+		fqdn = strings.TrimSuffix(fqdn, ".")
+		if fqdn == "" {
+			return
+		}
+		start := len(fqdn)
+		for {
+			// Find the last dot at or before current start.
+			lastDot := strings.LastIndexByte(fqdn[:start], '.')
+			label := fqdn[lastDot+1 : start]
+			if label == "" {
+				return
+			}
+			if !yield(label) {
+				return
+			}
+			if lastDot < 0 {
+				return
+			}
+			start = lastDot
+		}
 	}
-	parts := strings.Split(fqdn, ".")
-	slices.Reverse(parts)
-	return parts
 }
 
 // insertDomainTrie inserts a single domain rule (FQDN) into the trie. Labels right-to-left.
 func (m *matcher) insertDomainTrie(fqdn string) {
-	labels := domainLabels(fqdn)
-	if len(labels) == 0 {
-		return
-	}
 	if m.domainTrie == nil {
 		m.domainTrie = &domainTrieNode{}
 	}
 	node := m.domainTrie
-	for _, label := range labels {
+	for label := range domainLabels(fqdn) {
 		if node.children == nil {
 			node.children = make(map[string]*domainTrieNode)
 		}
@@ -131,13 +143,9 @@ func (m *matcher) insertDomainTrie(fqdn string) {
 }
 
 // matchDomainTrie returns true if qname (already normalized FQDN, lower) matches any domain rule in the trie.
-func (m *matcher) matchDomainTrie(qname string) bool {
-	labels := domainLabels(qname)
-	if len(labels) == 0 || m.domainTrie == nil {
-		return false
-	}
+func (m *matcher) matchDomainTrie(fqdn string) bool {
 	node := m.domainTrie
-	for _, label := range labels {
+	for label := range domainLabels(fqdn) {
 		if node == nil {
 			return false
 		}
@@ -153,22 +161,21 @@ func (m *matcher) matchDomainTrie(qname string) bool {
 }
 
 // Match returns true if qname matches any rule. Order: full -> domain (trie) -> keyword -> regex.
-func (m *matcher) Match(qname string) bool {
-	q := strings.ToLower(dns.Fqdn(qname))
+func (m *matcher) Match(fqdn string) bool {
 
-	if _, ok := m.full[q]; ok {
+	if _, ok := m.full[fqdn]; ok {
 		return true
 	}
-	if m.matchDomainTrie(q) {
+	if m.matchDomainTrie(fqdn) {
 		return true
 	}
 	for _, k := range m.keyword {
-		if strings.Contains(q, k) {
+		if strings.Contains(fqdn, k) {
 			return true
 		}
 	}
 	for _, re := range m.regex {
-		if re.MatchString(q) {
+		if re.MatchString(fqdn) {
 			return true
 		}
 	}
@@ -197,6 +204,6 @@ func (m *bloomedMatcher) AddRule(r Rule) {
 	}
 }
 
-func (m *bloomedMatcher) Match(qname string) bool {
-	return m.bf.MaybeMatch(qname) && m.m.Match(qname)
+func (m *bloomedMatcher) Match(fqdn string) bool {
+	return m.bf.MaybeMatch(fqdn) && m.m.Match(fqdn)
 }

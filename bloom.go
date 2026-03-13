@@ -1,6 +1,7 @@
 package ruledforward
 
 import (
+	"bytes"
 	"slices"
 	"strings"
 
@@ -47,23 +48,23 @@ func (b *BloomFilter) Add(s ...string) {
 // MaybeMatch returns true if qname or any of its parent suffixes might be in the set.
 // Used for pre-match: if false, definitely no match; if true, call full matcher.
 // Safe for concurrent read.
-func (b *BloomFilter) MaybeMatch(qname string) bool {
-	q := strings.ToLower(dns.Fqdn(qname))
+func (b *BloomFilter) MaybeMatch(fqdn string) bool {
+	q := []byte(fqdn)
 	// Check qname itself (full match)
-	if b.bf.Test([]byte(q)) {
+	if b.bf.Test(q) {
 		return true
 	}
 	// Check each parent suffix (domain match)
 	for {
-		idx := strings.Index(q, ".")
+		idx := bytes.Index(q, []byte("."))
 		if idx == -1 {
 			break
 		}
 		q = q[idx+1:]
-		if q == "" {
+		if len(q) == 0 {
 			break
 		}
-		if b.bf.Test([]byte(q)) {
+		if b.bf.Test(q) {
 			return true
 		}
 	}
