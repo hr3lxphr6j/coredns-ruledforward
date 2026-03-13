@@ -81,7 +81,9 @@ const (
 )
 
 func (g *Group) updateMatcher(dlcMap map[string][]Rule, updateItems byte) error {
-	rulesTotal.Reset()
+	rulesTotal.Delete(map[string]string{
+		"group": g.Name,
+	})
 	bm := NewBloomedMatcher(2<<13, bloomFP)
 
 	if updateItems&UpdateMatcherGeosite != 0 {
