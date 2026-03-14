@@ -183,12 +183,20 @@ func (r *Ruledforward) ServeDNS(ctx context.Context, w dns.ResponseWriter, req *
 		return plugin.NextOrFailure(r.Name(), r.Next, ctx, w, req)
 	}
 
+	fqdn := strings.ToLower(dns.Fqdn(qname))
 	for _, g := range r.groups {
 		// Skip default group in normal iteration, it will be handled if no match found
 		if g.Name == "default" {
 			continue
 		}
-		if m := g.Matcher(); m == nil || !m.Match(strings.ToLower(dns.Fqdn(qname))) {
+		m := g.Matcher()
+		if m == nil {
+			continue
+		}
+		start := time.Now()
+		matched := m.Match(fqdn)
+		matchDurationSeconds.WithLabelValues(g.Name).Observe(time.Since(start).Seconds())
+		if !matched {
 			continue
 		}
 

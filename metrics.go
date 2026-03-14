@@ -35,4 +35,14 @@ var (
 		Name:      "rules_total",
 		Help:      "Total number of rules loaded per group and rule type.",
 	}, []string{"group", "rule"})
+
+	// matchDurationSeconds is the time spent in Matcher.Match per group, in seconds.
+	// Observed on every Match call (hit or miss) for each non-default group.
+	matchDurationSeconds = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: plugin.Namespace,
+		Subsystem: "ruledforward",
+		Name:      "match_duration_seconds",
+		Help:      "Histogram of the time spent matching the query name against each group's rules.",
+		Buckets:   []float64{.000001, .00001, .00005, .0001, .00025, .0005, .001, .0025, .005},
+	}, []string{"group"})
 )

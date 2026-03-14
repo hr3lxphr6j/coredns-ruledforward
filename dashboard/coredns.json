@@ -63,7 +63,7 @@
             }
         ]
     },
-    "description": "CoreDNS dashboard with Ruledforward plugin metrics (rules by group/action, no_match, upstream failures). Based on CoreDNS 1.7.0+ dashboard by ejkinger.",
+    "description": "CoreDNS dashboard with Ruledforward plugin metrics (rules by group/action, no_match, upstream failures, match duration per group). Based on CoreDNS 1.7.0+ dashboard by ejkinger.",
     "editable": true,
     "fiscalYearStartMonth": 0,
     "graphTooltip": 0,
@@ -3071,6 +3071,116 @@
             ],
             "title": "规则数量 (by group, rule)",
             "type": "piechart"
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "${DS_PROMETHEUS}"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "axisBorderShow": false,
+                        "axisCenteredZero": false,
+                        "axisColorMode": "text",
+                        "axisLabel": "",
+                        "axisPlacement": "auto",
+                        "barAlignment": 0,
+                        "barWidthFactor": 0.6,
+                        "drawStyle": "line",
+                        "fillOpacity": 10,
+                        "gradientMode": "none",
+                        "hideFrom": {
+                            "legend": false,
+                            "tooltip": false,
+                            "viz": false
+                        },
+                        "insertNulls": false,
+                        "lineInterpolation": "linear",
+                        "lineWidth": 2,
+                        "pointSize": 5,
+                        "scaleDistribution": {
+                            "type": "linear"
+                        },
+                        "showPoints": "never",
+                        "showValues": false,
+                        "spanNulls": false,
+                        "stacking": {
+                            "group": "A",
+                            "mode": "none"
+                        },
+                        "thresholdsStyle": {
+                            "mode": "off"
+                        }
+                    },
+                    "decimals": 4,
+                    "mappings": [],
+                    "min": 0,
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": 0
+                            }
+                        ]
+                    },
+                    "unit": "s"
+                },
+                "overrides": []
+            },
+            "gridPos": {
+                "h": 7,
+                "w": 12,
+                "x": 12,
+                "y": 89
+            },
+            "id": 209,
+            "options": {
+                "legend": {
+                    "calcs": [
+                        "mean",
+                        "max"
+                    ],
+                    "displayMode": "list",
+                    "placement": "bottom",
+                    "showLegend": true
+                },
+                "tooltip": {
+                    "hideZeros": false,
+                    "mode": "multi",
+                    "sort": "none"
+                }
+            },
+            "pluginVersion": "12.3.3",
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "${DS_PROMETHEUS}"
+                    },
+                    "exemplar": true,
+                    "expr": "histogram_quantile(0.99, sum(rate(coredns_ruledforward_match_duration_seconds_bucket{instance=~\"$instance\"}[5m])) by (group, le))",
+                    "legendFormat": "P99 {{group}}",
+                    "refId": "A"
+                },
+                {
+                    "datasource": {
+                        "type": "prometheus",
+                        "uid": "${DS_PROMETHEUS}"
+                    },
+                    "exemplar": true,
+                    "expr": "sum(rate(coredns_ruledforward_match_duration_seconds_sum{instance=~\"$instance\"}[5m])) by (group) / sum(rate(coredns_ruledforward_match_duration_seconds_count{instance=~\"$instance\"}[5m])) by (group)",
+                    "hide": false,
+                    "legendFormat": "avg {{group}}",
+                    "refId": "B"
+                }
+            ],
+            "title": "规则组 Match 耗时 (P99 / 平均)",
+            "type": "timeseries"
         }
     ],
     "preload": false,
