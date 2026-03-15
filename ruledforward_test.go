@@ -175,7 +175,7 @@ func TestForwardGroupNoProxies(t *testing.T) {
 	req.SetQuestion("example.com.", dns.TypeA)
 	rec := dnstest.NewRecorder(&test.ResponseWriter{})
 	state := request.Request{W: rec, Req: req}
-	code, err := r.forwardGroup(context.Background(), rec, req, state, g)
+	code, err := r.forwardGroup(context.Background(), rec, state, g)
 	if code != dns.RcodeServerFailure {
 		t.Errorf("forwardGroup code = %d, want RcodeServerFailure", code)
 	}

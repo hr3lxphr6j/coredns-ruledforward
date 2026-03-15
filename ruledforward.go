@@ -210,7 +210,7 @@ func (r *Ruledforward) ServeDNS(ctx context.Context, w dns.ResponseWriter, req *
 			return 0, nil
 		case "forward":
 			requestsTotal.WithLabelValues(g.Name, "forward").Inc()
-			return r.forwardGroup(ctx, w, req, state, g)
+			return r.forwardGroup(ctx, w, state, g)
 		default:
 			continue
 		}
@@ -228,7 +228,7 @@ func (r *Ruledforward) ServeDNS(ctx context.Context, w dns.ResponseWriter, req *
 			return 0, nil
 		case "forward":
 			requestsTotal.WithLabelValues(r.defaultGroup.Name, "forward").Inc()
-			return r.forwardGroup(ctx, w, req, state, r.defaultGroup)
+			return r.forwardGroup(ctx, w, state, r.defaultGroup)
 		}
 	}
 
@@ -241,52 +241,64 @@ func soaForEmpty(origin string) []dns.RR {
 	return []dns.RR{&dns.SOA{Hdr: hdr, Ns: ".", Mbox: ".", Serial: 0, Refresh: 0, Retry: 0, Expire: 0, Minttl: emptyTTL}}
 }
 
-func (r *Ruledforward) forwardGroup(ctx context.Context, w dns.ResponseWriter, req *dns.Msg, state request.Request, g *Group) (int, error) {
+// connectWithRetry runs pr.Connect, retrying on ErrCachedClosed or when switching to TCP due to truncation.
+func connectWithRetry(ctx context.Context, state request.Request, pr *proxy.Proxy, opts proxy.Options) (*dns.Msg, error) {
+	for {
+		ret, err := pr.Connect(ctx, state, opts)
+		if errors.Is(err, proxy.ErrCachedClosed) {
+			continue
+		}
+		if ret != nil && ret.Truncated && !opts.ForceTCP && opts.PreferUDP {
+			opts.ForceTCP = true
+			continue
+		}
+		return ret, err
+	}
+}
+
+func (r *Ruledforward) forwardGroup(ctx context.Context, w dns.ResponseWriter, state request.Request, g *Group) (int, error) {
 	if len(g.Proxies) == 0 {
 		return dns.RcodeServerFailure, errNoHealthy
 	}
-	list := g.Policy.List(g.Proxies)
+
 	deadline := time.Now().Add(defaultTimeout)
-	i := 0
-	fails := 0
-	var upstreamErr error
+	nProxies := len(g.Proxies)
+	var firstProxy *proxy.Proxy
+	var roundIndex, failCount int
+	var lastErr error
 
-	for time.Now().Before(deadline) && ctx.Err() == nil {
-		if i >= len(list) {
-			i = 0
-			fails = 0
-		}
-		pr := list[i]
-		i++
-		if pr.Down(g.Maxfails) {
-			fails++
-			if fails < len(g.Proxies) {
-				continue
-			}
-			pr = list[0]
-		}
-
-		opts := g.Opts
-		var ret *dns.Msg
-		var err error
-		for {
-			ret, err = pr.Connect(ctx, state, opts)
-			if errors.Is(err, proxy.ErrCachedClosed) {
-				continue
-			}
-			if ret != nil && ret.Truncated && !opts.ForceTCP && opts.PreferUDP {
-				opts.ForceTCP = true
-				continue
-			}
+	for pr := range g.Policy.List(g.Proxies) {
+		if time.Now().After(deadline) || ctx.Err() != nil {
 			break
 		}
-		upstreamErr = err
+
+		// Remember first proxy for "all down" fallback.
+		if firstProxy == nil {
+			firstProxy = pr
+		}
+		roundIndex++
+		if roundIndex > nProxies {
+			roundIndex = 1
+			failCount = 0
+		}
+
+		// If this proxy is down, try first proxy once when all have failed.
+		if pr.Down(g.Maxfails) {
+			failCount++
+			if failCount < nProxies {
+				continue
+			}
+			pr = firstProxy
+		}
+
+		ret, err := connectWithRetry(ctx, state, pr, g.Opts)
+		lastErr = err
 
 		if err != nil {
 			if g.Maxfails != 0 {
 				pr.Healthcheck()
 			}
-			if fails < len(g.Proxies) {
+			if failCount < nProxies {
 				continue
 			}
 			break
@@ -305,8 +317,8 @@ func (r *Ruledforward) forwardGroup(ctx context.Context, w dns.ResponseWriter, r
 	}
 
 	forwardUpstreamFailTotal.WithLabelValues(g.Name).Inc()
-	if upstreamErr != nil {
-		return dns.RcodeServerFailure, upstreamErr
+	if lastErr != nil {
+		return dns.RcodeServerFailure, lastErr
 	}
 	return dns.RcodeServerFailure, errNoHealthy
 }
