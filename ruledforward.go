@@ -244,7 +244,7 @@ func soaForEmpty(origin string) []dns.RR {
 // connectWithRetry runs pr.Connect, retrying on ErrCachedClosed or when switching to TCP due to truncation.
 func connectWithRetry(ctx context.Context, state request.Request, pr *proxy.Proxy, opts proxy.Options) (*dns.Msg, error) {
 	for {
-		ret, err := pr.Connect(ctx, state, opts)
+		ret, _, _, err := pr.Connect(ctx, state, opts)
 		if errors.Is(err, proxy.ErrCachedClosed) {
 			continue
 		}

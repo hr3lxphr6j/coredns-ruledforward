@@ -3,7 +3,7 @@
 
 BINARY     ?= coredns
 VERSION    ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "0.0.0-dev")
-COREDNS_VER?= v1.14.2
+COREDNS_VER?= v1.14.6
 BUILD_DIR  ?= .build
 DIST_DIR   ?= dist
 PACK_DIR   ?= $(BUILD_DIR)/pack
